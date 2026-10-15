@@ -2,44 +2,42 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
+from pathlib import Path
 from database import engine, Base
 from routers import (
     auth, users, categories, products, orders, payments, 
     banners, brands, dashboard, settings, backup
 )
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
+# 1. បង្កើត database tables ដោយសុវត្ថិភាព
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"Database initialization warning: {e}")
 
 app = FastAPI(title="E-Commerce API", version="1.0.0")
 
-# Configure CORS - Allow all origins for development
+# 2. កែសម្រួល CORS ឱ្យត្រូវស្តង់ដារ (អនុញ្ញាត credentials ជាមួយ wildcard regex)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001", 
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
-        # Allow all for testing
-        "https://shophub.loca.lt",
-        "*"
-    ],
+    allow_origin_regex=r"https?://.*",  # ដំណើរការបានគ្រប់ domain (localhost, Vercel, Netlify) ដោយមិនប៉ះទង្គិច credentials
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
 )
 
-# Serve static files
-os.makedirs("uploads", exist_ok=True)
-os.makedirs("uploads/products", exist_ok=True)
-os.makedirs("uploads/banners", exist_ok=True)
-os.makedirs("uploads/brands", exist_ok=True)
+# 3. បង្កើត និងកំណត់ Folder uploads ដោយប្រើ Absolute Path
+BASE_DIR = Path(__file__).resolve().parent
+UPLOAD_DIR = BASE_DIR / "uploads"
 
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+os.makedirs(UPLOAD_DIR / "products", exist_ok=True)
+os.makedirs(UPLOAD_DIR / "banners", exist_ok=True)
+os.makedirs(UPLOAD_DIR / "brands", exist_ok=True)
 
-# Include routers
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+
+# 4. Include routers
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(categories.router)
@@ -62,4 +60,5 @@ def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
